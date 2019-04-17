@@ -1,0 +1,181 @@
+﻿<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Canvas в HTML5</title>
+</head>
+
+<body>
+    <h1 id="tst_id">3D model rendering in Javascript</h1>
+    <div>
+        <button id="loadButton">Load default model</button>
+        <button id="renderButton">Render</button>
+    </div>
+    <div>
+        <canvas id="mainCanvas" style="border: 1px solid #000; filter:blur(0px)">
+            Картинка
+        </canvas>
+        <textarea id="modelBox">Paste wavefront obj model there or press "Load default model" button, and press "Render" button...</textarea>
+    </div>
+    
+</body>
+
+
+<script>
+
+    // Стартовые переменные
+    var main_canvas = document.getElementById("mainCanvas");
+    var model_box = document.getElementById("modelBox");
+    main_canvas.width = 800;
+    main_canvas.height = 600;
+    model_box.style.width = main_canvas.width/2 + 'px';
+    model_box.style.height = main_canvas.height + 'px';
+    var main_context = main_canvas.getContext("2d");
+    var model_vertices = []; // Модель (вершины) (v 0.608654 -0.568839 -0.416318) (массив из ["-0.000581696", "-0.734665", "-0.623267"])
+    var model_faces = []; // Модель (грани) (f 1193/1240/1193 1180/1227/1180 1179/1226/1179) (массив из [["24", "1", "24"]["25", "2", "25"]["26", "3", "26"]])
+    var model_size_cf = 290;
+    var x_pos_cf = (main_canvas.width / 2);
+    var y_pos_cf = (main_canvas.height / 2);
+
+    // ============================================================================================================================
+
+    // Функция рисования модели (главный цикл)
+    function Render() {
+        model_scaling();
+        for (let i = 0; i < model_faces.length; i++) { // при 2485
+            let face = model_faces[i];
+            let a = model_vertices[face[0][0]-1];
+            let b = model_vertices[face[1][0]-1];
+            let c = model_vertices[face[2][0]-1];
+            Line(a[0], a[1], b[0], b[1]);
+            Line(b[0], b[1], c[0], c[1]);
+            Line(c[0], c[1], a[0], a[1]);
+        }
+    }
+    function model_scaling() {
+        for (let i = 0; i < model_vertices.length; i++) {
+            model_vertices[i][0] = (model_vertices[i][0] * model_size_cf) + x_pos_cf;
+            model_vertices[i][1] = (model_vertices[i][1] * model_size_cf) + y_pos_cf;
+            model_vertices[i][2] = (model_vertices[i][2] * model_size_cf);
+        }
+    }
+
+    // ============================================================================================================================
+
+    // Считывание модели из файла
+    function GetModel() {
+        function Load() {
+            httpRequest = new XMLHttpRequest();
+            httpRequest.open("GET", "/RayTracing_on_JS/Model.txt", true);
+            httpRequest.onreadystatechange = OnRequestStateChange;
+            httpRequest.send(null);
+        }
+        function OnRequestStateChange() {
+            if (httpRequest.readyState != 4) {
+                document.getElementById("modelBox").innerHTML = '!!! Model loading error !!!';
+                return;
+            }
+            if (httpRequest.status != 200)
+                return;
+            let _model = httpRequest.responseText;
+            let _str = '';
+            let _v = 0;
+            let _f = 0;
+            for (let i = 0; i <= _model.length; i++) {
+                if (_model[i] != '\n') {
+                    _str += _model[i];
+                }
+                else {
+                    if (_str[0] == 'v' && _str[1] == ' ') { // ищем вида 'v 0.608654 -0.568839 -0.416318'
+                        let _exp = /-*\d+(\.\d+)*/gi;
+                        let _res = _str.match(_exp);
+                        model_vertices[_v] = [];
+                        for (let k = 0; k < _res.length; k++) {
+                            if (_res.length == 3) { // на всякий...
+                                model_vertices[_v][k] = _res[k];
+                            }
+                        }
+                        _v++;
+                    }
+                    else if (_str[0] == 'f' && _str[1] == ' ') { // ищем вида 'f 1193/1240/1193 1180/1227/1180 1179/1226/1179'
+                        let _exp = /(-*\d+\/*)+/g;
+                        let _res = _str.match(_exp);
+                        model_faces[_f] = [];
+                        for (let k = 0; k < _res.length; k++) {
+                            model_faces[_f][k] = [];
+                            let _exp = /-*\d+/g; // ищем вида '1123/1170/1123'
+                            let _str = _res[k];
+                            let __res = _str.match(_exp);
+                            //console.log(__res);
+                            for (let l = 0; l < __res.length; l++) {
+                                model_faces[_f][k][l] = __res[l];
+                            }
+                        }
+                        _f++;
+                    }
+                    _str = '';
+                }
+            }
+            document.getElementById("modelBox").innerHTML = _model;
+        }
+        Load();
+    }
+
+
+    // Создание запроса на анимацию (на будущее)
+    (function () {
+        var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
+            window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+        window.requestAnimationFrame = requestAnimationFrame;
+    })();
+
+
+
+
+
+    // ============================================================================================================================
+
+    // Функция Line
+    function Line(x0, y0, x1, y1) {
+        main_context.strokeStyle = "black";
+        main_context.fillStyle = "blue";
+        main_context.lineWidth = 0.2;
+        main_context.beginPath();
+        main_context.moveTo(x0, main_canvas.height - y0);
+        main_context.lineTo(x1, main_canvas.height - y1);
+        main_context.closePath();
+        main_context.stroke();
+    }
+
+    // ============================================================================================================================
+
+    // Клики по кнопкам:
+    document.getElementById("loadButton").onclick = function (e) {
+        GetModel();
+    }
+    document.getElementById("renderButton").onclick = function (e) {
+        Render();
+    }
+    // ============================================================================================================================
+
+    // Шаг анимации (на будущее)
+    function step(timestamp) {
+        var progress = timestamp;
+
+        // Тут вызываем функции отрисовок:
+
+
+        // if (progress < 30000) {
+        //     requestAnimationFrame(step);
+        // }
+    }
+
+// ============================================================================================================================
+
+        // Запуск первого кадра (на будущее)
+        // requestAnimationFrame(step);
+
+</script>
+
+</html>
