@@ -4,6 +4,17 @@
 <head>
     <meta charset="utf-8">
     <title>Canvas в HTML5</title>
+    <style>
+        html,
+        body,
+        div,
+        b {
+            font-family: 'Roboto', sans-serif;
+            font-size: 14px;
+            background: #fafafa;
+            color: #333;
+        }
+    </style>
 </head>
 
 <body>
@@ -69,7 +80,7 @@
                 // Triangle(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], [-1, 0, 1], "rgba(0,0,0,1)"); 
                 // Triangle(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], [0, 1, 1], "rgba(0,0,0,1)"); 
                 // Triangle(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], [0, -1, 1], "rgba(0,0,0,1)"); 
-                Triangle(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], light_vector); 
+                Triangle(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], light_vector);
             }
             if (render_type == 3) {
 
@@ -193,7 +204,7 @@
         let Cz = z0;
         let Dx = x2;
         let Dy = y2;
-        let Dz = z2;       
+        let Dz = z2;
         let _vm = VectorMuliple_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz); // Векторное произведение краёв полигона
         let _va = VectorAngle_DOTS(0, 0, 0, _light_vector[0], _light_vector[1], _light_vector[2], 0, 0, 0, _vm[0], _vm[1], _vm[2]); // Косинус угла между векторным произведением и вектором направления освещения
 
@@ -206,15 +217,15 @@
                 _color = color;
             }
             main_context.lineWidth = 1;
-            main_context.strokeStyle = _color;       
+            main_context.strokeStyle = _color;
             main_context.fillStyle = _color;
             main_context.beginPath();
             main_context.moveTo(x0, main_canvas.height - y0);
             main_context.lineTo(x1, main_canvas.height - y1);
-            main_context.lineTo(x2, main_canvas.height - y2);         
-            main_context.stroke();  
-            main_context.closePath();  
-            main_context.fill();      
+            main_context.lineTo(x2, main_canvas.height - y2);
+            main_context.stroke();
+            main_context.closePath();
+            main_context.fill();
         }
         else {
             // Не рисуем ничего, т. к. свет падает позади полигона. 
