@@ -9,16 +9,20 @@
 <body>
     <h1 id="tst_id">3D model rendering in Javascript</h1>
     <div>
+        <button id="resetButton">Reset</button>
         <button id="loadButton">Load default model</button>
-        <button id="renderButton">Render</button>
+        <button id="render1Button">Render1</button>
+        <button id="render2Button">Render2</button>
+        <button id="render3Button">Render3</button>
     </div>
     <div>
-        <canvas id="mainCanvas" style="border: 1px solid #000; filter:blur(0px)">
+        <canvas id="mainCanvas" style="background-color:rgb(232, 255, 170); border: 1px solid #000; filter:blur(0px)">
             Картинка
         </canvas>
-        <textarea id="modelBox">Paste wavefront obj model there or press "Load default model" button, and press "Render" button...</textarea>
+        <textarea
+            id="modelBox">Paste wavefront obj model there or press "Load default model" button, and press "Render_N" button...</textarea>
     </div>
-    
+
 </body>
 
 
@@ -29,7 +33,7 @@
     var model_box = document.getElementById("modelBox");
     main_canvas.width = 800;
     main_canvas.height = 600;
-    model_box.style.width = main_canvas.width/2 + 'px';
+    model_box.style.width = main_canvas.width / 2 + 'px';
     model_box.style.height = main_canvas.height + 'px';
     var main_context = main_canvas.getContext("2d");
     var model_vertices = []; // Модель (вершины) (v 0.608654 -0.568839 -0.416318) (массив из ["-0.000581696", "-0.734665", "-0.623267"])
@@ -37,22 +41,53 @@
     var model_size_cf = 290;
     var x_pos_cf = (main_canvas.width / 2);
     var y_pos_cf = (main_canvas.height / 2);
+    var light_vector = [0, 0, 1]; // Вектор освещения. Направлен от экрана прямо в Z
 
     // ============================================================================================================================
 
     // Функция рисования модели (главный цикл)
-    function Render() {
-        model_scaling();
+    function Render(render_type) {
+        //main_context.clearRect(0, 0, main_canvas.width, main_canvas.height);
+        //GetModel();
+        model_scaling(); // Масштабирование под экран
         for (let i = 0; i < model_faces.length; i++) { // при 2485
             let face = model_faces[i];
-            let a = model_vertices[face[0][0]-1];
-            let b = model_vertices[face[1][0]-1];
-            let c = model_vertices[face[2][0]-1];
-            Line(a[0], a[1], b[0], b[1]);
-            Line(b[0], b[1], c[0], c[1]);
-            Line(c[0], c[1], a[0], a[1]);
+            let a = model_vertices[face[0][0] - 1];
+            let b = model_vertices[face[1][0] - 1];
+            let c = model_vertices[face[2][0] - 1];
+
+            if (render_type == 1) {
+                // рисуем каркас модели
+                Line(a[0], a[1], b[0], b[1]);
+                Line(b[0], b[1], c[0], c[1]);
+                Line(c[0], c[1], a[0], a[1]);
+            }
+            if (render_type == 2) {
+                // рисуем полигоны
+                // Triangle(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], [0, 0, 1], "rgba(0,0,0,1)"); 
+                // Triangle(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], [1, 0, 1], "rgba(0,0,0,1)"); 
+                // Triangle(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], [-1, 0, 1], "rgba(0,0,0,1)"); 
+                // Triangle(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], [0, 1, 1], "rgba(0,0,0,1)"); 
+                // Triangle(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], [0, -1, 1], "rgba(0,0,0,1)"); 
+                Triangle(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], light_vector); 
+            }
+            if (render_type == 3) {
+
+            }
+            let screen_coords = [] // Vec2i[3]
+            let world_coords = []; // Vec3f[3]
+            for (let j = 0; j < 3; j++) {
+                let v = model_vertices[face[j][0] - 1];
+                screen_coords[j] = [];
+                screen_coords[j][0] = v[0]; // x
+                screen_coords[j][1] = v[1]; // y
+                world_coords[j] = v;
+            }
+            let n = []; // Vec3f
+            n[0] = Math.pow(world_coords[2] - world_coords[0]), (world_coords[1] - world_coords[0]);
         }
     }
+
     function model_scaling() {
         for (let i = 0; i < model_vertices.length; i++) {
             model_vertices[i][0] = (model_vertices[i][0] * model_size_cf) + x_pos_cf;
@@ -131,15 +166,11 @@
     })();
 
 
-
-
-
     // ============================================================================================================================
 
-    // Функция Line
+    // Функция Line. Рисует линию
     function Line(x0, y0, x1, y1) {
         main_context.strokeStyle = "black";
-        main_context.fillStyle = "blue";
         main_context.lineWidth = 0.2;
         main_context.beginPath();
         main_context.moveTo(x0, main_canvas.height - y0);
@@ -148,14 +179,107 @@
         main_context.stroke();
     }
 
+    // Функция Triangle. Заливает полигон цветом
+    function Triangle(x0, y0, z0, x1, y1, z1, x2, y2, z2, light_vector, color) {
+        let _light_vector = light_vector;
+        let Ax = x0; // Получили два вектора: AB и CD с общим началом (хотя для векторного произведения это не важно)
+        let Ay = y0;
+        let Az = z0;
+        let Bx = x1;
+        let By = y1;
+        let Bz = z1;
+        let Cx = x0;
+        let Cy = y0;
+        let Cz = z0;
+        let Dx = x2;
+        let Dy = y2;
+        let Dz = z2;       
+        let _vm = VectorMuliple_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz); // Векторное произведение краёв полигона
+        let _va = VectorAngle_DOTS(0, 0, 0, _light_vector[0], _light_vector[1], _light_vector[2], 0, 0, 0, _vm[0], _vm[1], _vm[2]); // Косинус угла между векторным произведением и вектором направления освещения
+
+        if (_va >= 0) {
+            let r = Math.floor(_va * 255);
+            let g = Math.floor(_va * 255);
+            let b = Math.floor(_va * 255);
+            let _color = "rgba(" + r + "," + g + "," + b + ", 1)";
+            if (color != null) {
+                _color = color;
+            }
+            main_context.lineWidth = 1;
+            main_context.strokeStyle = _color;       
+            main_context.fillStyle = _color;
+            main_context.beginPath();
+            main_context.moveTo(x0, main_canvas.height - y0);
+            main_context.lineTo(x1, main_canvas.height - y1);
+            main_context.lineTo(x2, main_canvas.height - y2);         
+            main_context.stroke();  
+            main_context.closePath();  
+            main_context.fill();      
+        }
+        else {
+            // Не рисуем ничего, т. к. свет падает позади полигона. 
+            // Но такой метод отсечения работает только для выпуклых поверхностей
+        }
+
+        // Нахождение угла между векторами AB и CD (косинус угла)
+        function VectorAngle_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz) { // Координаты задаются точками начала и конца, векторы вида AB и CD
+            let AB = [Bx - Ax, By - Ay, Bz - Az]; // вектор AB по координатам точек
+            let CD = [Dx - Cx, Dy - Cy, Dz - Cz]; // вектор CD по координатам точек
+            let ABx = AB[0];
+            let ABy = AB[1];
+            let ABz = AB[2];
+            let CDx = CD[0];
+            let CDy = CD[1];
+            let CDz = CD[2];
+            let ABCD = ABx * CDx + ABy * CDy + ABz * CDz; //скалярное произведение векторов
+            let length_AB = Math.sqrt(Math.pow(ABx, 2) + Math.pow(ABy, 2) + Math.pow(ABz, 2));// длина вектора AB
+            let length_CD = Math.sqrt(Math.pow(CDx, 2) + Math.pow(CDy, 2) + Math.pow(CDz, 2));// длина вектора CD
+            let result = (ABCD / (length_AB * length_CD));
+            return result;
+        }
+        // Функции умножения трехмерных векторов (векторное произведение). Выдает координаты скаляра. т. е. перпендикуляра к поверхности, на которой лежат исходные вектора     
+        function VectorMuliple_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz) { // Координаты задаются точками начала и конца, векторы вида AB и CD
+            let AB = [Bx - Ax, By - Ay, Bz - Az]; // вектор AB по координатам точек
+            let CD = [Dx - Cx, Dy - Cy, Dz - Cz]; // вектор CD по координатам точек
+            let ABx = AB[0];
+            let ABy = AB[1];
+            let ABz = AB[2];
+            let CDx = CD[0];
+            let CDy = CD[1];
+            let CDz = CD[2];
+            let i = (ABy * CDz - ABz * CDy);
+            let j = -1 * (ABx * CDz - ABz * CDx); // отрицательное, для нужной тройки векторов
+            let k = (ABx * CDy - ABy * CDx);
+            let result = [i, j, k];
+            return result;
+        }
+        function VectorMuliple(x0, y0, z0, x1, y1, z1) { // То же самое, но начало векторов - в [0. 0. 0] НЕ ИСПОЛЬЗУЕТСЯ
+            let i = (y0 * z1 - z0 * y1);
+            let j = (x0 * z1 - z0 * x1);
+            let k = (x0 * y1 - y0 * x1);
+            let result = [i, j, k];
+            return result;
+        }
+    }
+
     // ============================================================================================================================
 
     // Клики по кнопкам:
+    document.getElementById("resetButton").onclick = function (e) {
+        //Render(0);
+        main_context.clearRect(0, 0, main_canvas.width, main_canvas.height);
+    }
     document.getElementById("loadButton").onclick = function (e) {
         GetModel();
     }
-    document.getElementById("renderButton").onclick = function (e) {
-        Render();
+    document.getElementById("render1Button").onclick = function (e) {
+        Render(1);
+    }
+    document.getElementById("render2Button").onclick = function (e) {
+        Render(2);
+    }
+    document.getElementById("render3Button").onclick = function (e) {
+        Render(3);
     }
     // ============================================================================================================================
 
