@@ -118,36 +118,52 @@
             let Dy = c[1];
             let Dz = c[2];
 
-            let _vm = VectorMuliple_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz); // Векторное произведение краёв полигона
+            let Ax_or = a_or[0]; // Получили два вектора: AB_or и CD_or с общим началом (хотя для векторного произведения это не важно) ОРИГИНАЛЬНЫЕ
+            let Ay_or = a_or[1];
+            let Az_or = a_or[2];
+            let Bx_or = b_or[0];
+            let By_or = b_or[1];
+            let Bz_or = b_or[2];
+            let Cx_or = a_or[0];
+            let Cy_or = a_or[1];
+            let Cz_or = a_or[2];
+            let Dx_or = c_or[0];
+            let Dy_or = c_or[1];
+            let Dz_or = c_or[2];
+
+            // let _vm = VectorMuliple_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz); // Векторное произведение краёв полигона
+            let _vm = VectorMuliple_DOTS(Ax_or, Ay_or, Az_or, Bx_or, By_or, Bz_or, Cx_or, Cy_or, Cz_or, Dx_or, Dy_or, Dz_or); // Векторное произведение краёв полигона
             let _va = VectorAngle_DOTS(0, 0, 0, light_vector[0], light_vector[1], light_vector[2], 0, 0, 0, _vm[0], _vm[1], _vm[2]); // Косинус угла между векторным произведением и вектором направления освещения
-            
-            if (_va >= 0) { 
-                // рисуем только если cos > 0, т. е. взгляд снаружи полигона (backface culling)
-                // Иначе не рисуем ничего, т. к. свет падает позади полигона. 
-                // Но такой метод отсечения работает только для выпуклых поверхностей
+
+
+            //if (_va != 0) { 
+            // рисуем только если cos > 0, т. е. взгляд снаружи полигона (backface culling)
+            // Иначе не рисуем ничего, т. к. свет падает позади полигона. 
+            // Но такой метод отсечения работает только для выпуклых поверхностей
+            if (true) { // костыль, чтобы не вычислять векторное произведение во всех трех точках
+                let r = Math.abs(Math.floor(_va * 255));
+                let g = Math.abs(Math.floor(_va * 255));
+                let b = Math.abs(Math.floor(_va * 255));
+                let color = "rgba(" + r + "," + g + "," + b + ", 1)";
                 if (render_type == 2) {
-                    let r = Math.abs(Math.floor(_va * 255));
-                    let g = Math.abs(Math.floor(_va * 255));
-                    let b = Math.abs(Math.floor(_va * 255));
-                    let color = "rgba(" + r + "," + g + "," + b + ", 1)";
-                    Triangle(Ax, Ay, Az, Bx, By, Bz, Dx, Dy, Dz, uv0.x, uv0.y, uv1.x, uv1.y, uv2.x, uv2.y, zbuffer, color);
+                    Triangle(Ax, Ay, Az, Bx, By, Bz, Dx, Dy, Dz, uv0.x, uv0.y, uv1.x, uv1.y, uv2.x, uv2.y, zbuffer, color, render_type);
                 }
                 if (render_type == 3) {
-                    Triangle(Ax, Ay, Az, Bx, By, Bz, Dx, Dy, Dz, uv0.x, uv0.y, uv1.x, uv1.y, uv2.x, uv2.y, zbuffer);
+                    Triangle(Ax, Ay, Az, Bx, By, Bz, Dx, Dy, Dz, uv0.x, uv0.y, uv1.x, uv1.y, uv2.x, uv2.y, zbuffer, _va, render_type);
                 }
-            } 
-
-            let screen_coords = [] // Vec2i[3]
-            let world_coords = []; // Vec3f[3]
-            for (let j = 0; j < 3; j++) {
-                let v = model_vertices[face[j][0] - 1];
-                screen_coords[j] = [];
-                screen_coords[j][0] = v[0]; // x
-                screen_coords[j][1] = v[1]; // y
-                world_coords[j] = v;
             }
-            let n = []; // Vec3f
-            n[0] = Math.pow(world_coords[2] - world_coords[0]), (world_coords[1] - world_coords[0]);
+
+            // let screen_coords = [] // Vec2i[3]
+            // let world_coords = []; // Vec3f[3]
+            // for (let j = 0; j < 3; j++) {
+            //     let v = model_vertices[face[j][0] - 1];
+            //     screen_coords[j] = [];
+            //     screen_coords[j][0] = v[0]; // x
+            //     screen_coords[j][1] = v[1]; // y
+            //     world_coords[j] = v;
+            // }
+            // let n = []; // Vec3f
+            // n[0] = Math.pow(world_coords[2] - world_coords[0]), (world_coords[1] - world_coords[0]);
         }
     }
 
@@ -393,7 +409,7 @@
     // }
 
     // Функция Triangle. Заливает полигон цветом попиксельно
-    function Triangle(x0, y0, z0, x1, y1, z1, x2, y2, z2, uv0_x, uv0_y, uv1_x, uv1_y, uv2_x, uv2_y, zbuffer = [], _color = null) { // uv - текстурные координаты { x, y } 
+    function Triangle(x0, y0, z0, x1, y1, z1, x2, y2, z2, uv0_x, uv0_y, uv1_x, uv1_y, uv2_x, uv2_y, zbuffer, intensity, render_type = 2) { // uv - текстурные координаты { x, y } 
         if (y0 > y1) {
             x0 = [x1, x1 = x0][0]; // swap(t0, t1);
             y0 = [y1, y1 = y0][0];
@@ -487,17 +503,25 @@
                     x: Math.round(uvA.x + (uvB.x - uvA.x) * phi),
                     y: Math.round(uvA.y + (uvB.y - uvA.y) * phi)
                 }
-                // console.log(uvP);
                 let r = texture_array[uvP.y][uvP.x].red;
                 let g = texture_array[uvP.y][uvP.x].green;
                 let b = texture_array[uvP.y][uvP.x].blue;
-                let color = "rgba(" + r + "," + g + "," + b + ", 1)";
-                if (_color != null) { color = _color }
-                let idx = P.x + P.y * main_canvas.width;
-                if (zbuffer[idx] < P.z) {
-                    zbuffer[idx] = P.z;
-                    dot(P.x, P.y, 1, color);
+                let idx = P.x + P.y * main_canvas.width;               
+                if (render_type == 2) {
+                    if (zbuffer[idx] < P.z) {
+                        zbuffer[idx] = P.z;
+                        dot(P.x, P.y, 1, intensity);
+                    }
                 }
+                if (render_type == 3) {
+                    let color = "rgba(" + r* intensity + "," + g* intensity + "," + b* intensity + ", 1)";
+                    if (zbuffer[idx] < P.z) {
+                        zbuffer[idx] = P.z;
+                        dot(P.x, P.y, 1, color);
+                    }
+                }
+
+
             }
             //dot(A.x, i, 1, color);
             //dot(B.x, i, 1, color);          
