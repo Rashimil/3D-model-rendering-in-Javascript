@@ -20,7 +20,7 @@
 <body>
     <h1 id="tst_id">3D model rendering in Javascript</h1>
     <div>
-        <button id="loadButton">Load default model</button>
+        <button id="loadButton">Load model + texture</button>
         <button id="resetButton">Reset</button>
         <button id="render1Button">Render1</button>
         <button id="render2Button">Render2</button>
@@ -29,10 +29,11 @@
     </div>
     <div>
         <canvas id="mainCanvas" style="background-color:rgb(232, 255, 170); border: 1px solid #000; filter:blur(0px)">
-            Картинка
+            Рендер
         </canvas>
-        <canvas id="addCanvas" style="background-color:rgb(232, 255, 170); border: 1px solid #000; filter:blur(0px)">
-            Картинка
+        <canvas id="textureCanvas"
+            style="background-color:rgb(232, 255, 170); border: 1px solid #000; filter:blur(0px); display: none">
+            Текстура
         </canvas>
         <textarea
             id="modelBox">Paste wavefront obj model there or press "Load default model" button, and press "Render_N" button...</textarea>
@@ -45,22 +46,25 @@
 
     // Стартовые переменные
     var main_canvas = document.getElementById("mainCanvas");
-    var add_canvas = document.getElementById("addCanvas");
+    var texture_canvas = document.getElementById("textureCanvas");
     var model_box = document.getElementById("modelBox");
     main_canvas.width = 800;
     main_canvas.height = 600;
-    add_canvas.width = main_canvas.width;
-    add_canvas.height = main_canvas.height;
+    texture_canvas.width = 1024;
+    texture_canvas.height = 1024;
     model_box.style.width = main_canvas.width / 2 + 'px';
     model_box.style.height = main_canvas.height + 'px';
     var main_context = main_canvas.getContext("2d");
-    var add_context = add_canvas.getContext("2d");
+    var texture_context = texture_canvas.getContext("2d");
     var model_vertices = []; // Модель (вершины) (v 0.608654 -0.568839 -0.416318) (массив из ["-0.000581696", "-0.734665", "-0.623267"])
+    var model_vertices_original = []; // То же самое, но не отмасштабированное (НЕ ИСПОЛЬЗУЕТСЯ)
     var model_faces = []; // Модель (грани) (f 1193/1240/1193 1180/1227/1180 1179/1226/1179) (массив из [["24", "1", "24"]["25", "2", "25"]["26", "3", "26"]])
+    var model_vertices_textures = []; // Модель (тектурные координаты вершин) (vt  0.035 0.178 0.000) (массив из [0.399, 0.002, 0.000])
+    var texture_array = []; // Массив текстуры
     var model_size_cf = 290; // Коэффициент увеличения размера модели
     var x_pos_cf = (main_canvas.width / 2);
     var y_pos_cf = (main_canvas.height / 2);
-    var light_vector = [0, 0, 1]; // Вектор освещения. Направлен от экрана прямо в Z  
+    var light_vector = [0, 0, 1]; // Вектор освещения (или взгляда...). Направлен от экрана прямо в Z  
 
     // ============================================================================================================================
 
@@ -71,10 +75,28 @@
             zbuffer[i] = -Infinity;
         }
         for (let i = 0; i < model_faces.length; i++) { // 2492
-            let face = model_faces[i];
-            let a = model_vertices[face[0][0] - 1];
+
+            let face = model_faces[i]; // связь вида 1193/1240/1193 1180/1227/1180 1179/1226/1179
+
+            // первая тройка чисел (геометрические координаты) ОТМАСШТАБИРОВАННЫЕ (абсолютные)
+            let a = model_vertices[face[0][0] - 1]; // тройки вида v 239.772 125.234 478.178
             let b = model_vertices[face[1][0] - 1];
             let c = model_vertices[face[2][0] - 1];
+
+            // первая тройка чисел (геометрические координаты) ОРИГИНАЛЬНЫЕ (относительные)
+            let a_or = model_vertices_original[face[0][0] - 1]; // тройки вида v 0.772 0.234 0.178
+            let b_or = model_vertices_original[face[1][0] - 1];
+            let c_or = model_vertices_original[face[2][0] - 1];
+
+            // вторая тройка чисел (текстурные координаты) ОРИГИНАЛЬНЫЕ (относительные)
+            let a_vt = model_vertices_textures[face[0][1] - 1]; // тройки вида vt 0.472 0.934 0.000
+            let b_vt = model_vertices_textures[face[1][1] - 1];
+            let c_vt = model_vertices_textures[face[2][1] - 1];
+
+            // вторая тройка чисел (текстурные координаты) ОТМАСШТАБИРОВАННЫЕ (абсолютные)
+            let uv0 = get_texture_coord(a_vt[0], a_vt[1]);
+            let uv1 = get_texture_coord(b_vt[0], b_vt[1]);
+            let uv2 = get_texture_coord(c_vt[0], c_vt[1]);
 
             if (render_type == 1) {
                 // рисуем каркас модели
@@ -82,40 +104,38 @@
                 Line(b[0], b[1], c[0], c[1], 1, "black");
                 Line(c[0], c[1], a[0], a[1], 1, "black");
             }
+
+            let Ax = a[0]; // Получили два вектора: AB и CD с общим началом (хотя для векторного произведения это не важно)
+            let Ay = a[1];
+            let Az = a[2];
+            let Bx = b[0];
+            let By = b[1];
+            let Bz = b[2];
+            let Cx = a[0];
+            let Cy = a[1];
+            let Cz = a[2];
+            let Dx = c[0];
+            let Dy = c[1];
+            let Dz = c[2];
+
+            let _vm = VectorMuliple_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz); // Векторное произведение краёв полигона
+            let _va = VectorAngle_DOTS(0, 0, 0, light_vector[0], light_vector[1], light_vector[2], 0, 0, 0, _vm[0], _vm[1], _vm[2]); // Косинус угла между векторным произведением и вектором направления освещения
             
-            if (render_type == 2) {
-                // Находим цвет:
-                let Ax = a[0]; // Получили два вектора: AB и CD с общим началом (хотя для векторного произведения это не важно)
-                let Ay = a[1];
-                let Az = a[2];
-                let Bx = b[0];
-                let By = b[1];
-                let Bz = b[2];
-                let Cx = a[0];
-                let Cy = a[1];
-                let Cz = a[2];
-                let Dx = c[0];
-                let Dy = c[1];
-                let Dz = c[2];
-                let _vm = VectorMuliple_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz); // Векторное произведение краёв полигона
-                let _va = VectorAngle_DOTS(0, 0, 0, light_vector[0], light_vector[1], light_vector[2], 0, 0, 0, _vm[0], _vm[1], _vm[2]); // Косинус угла между векторным произведением и вектором направления освещения
-                if (_va >= 0) {
+            if (_va >= 0) { 
+                // рисуем только если cos > 0, т. е. взгляд снаружи полигона (backface culling)
+                // Иначе не рисуем ничего, т. к. свет падает позади полигона. 
+                // Но такой метод отсечения работает только для выпуклых поверхностей
+                if (render_type == 2) {
                     let r = Math.abs(Math.floor(_va * 255));
                     let g = Math.abs(Math.floor(_va * 255));
                     let b = Math.abs(Math.floor(_va * 255));
                     let color = "rgba(" + r + "," + g + "," + b + ", 1)";
-                                      
-                    Triangle(Ax, Ay, Az, Bx, By, Bz, Dx, Dy, Dz, color, zbuffer);
+                    Triangle(Ax, Ay, Az, Bx, By, Bz, Dx, Dy, Dz, uv0.x, uv0.y, uv1.x, uv1.y, uv2.x, uv2.y, zbuffer, color);
                 }
-                else {
-                    // Не рисуем ничего, т. к. свет падает позади полигона. 
-                    // Но такой метод отсечения работает только для выпуклых поверхностей
+                if (render_type == 3) {
+                    Triangle(Ax, Ay, Az, Bx, By, Bz, Dx, Dy, Dz, uv0.x, uv0.y, uv1.x, uv1.y, uv2.x, uv2.y, zbuffer);
                 }
-            }
-            
-            if (render_type == 3) {
-                
-            }
+            } 
 
             let screen_coords = [] // Vec2i[3]
             let world_coords = []; // Vec3f[3]
@@ -130,7 +150,7 @@
             n[0] = Math.pow(world_coords[2] - world_coords[0]), (world_coords[1] - world_coords[0]);
         }
     }
-    
+
     // ============================================================================================================================
 
     // Считывание модели из файла
@@ -152,6 +172,7 @@
             let _str = '';
             let _v = 0;
             let _f = 0;
+            let _vt = 0;
             for (let i = 0; i <= _model.length; i++) {
                 if (_model[i] != '\n') {
                     _str += _model[i];
@@ -161,9 +182,11 @@
                         let _exp = /-*\d+(\.\d+)*/gi;
                         let _res = _str.match(_exp);
                         model_vertices[_v] = [];
+                        model_vertices_original[_v] = [];
                         for (let k = 0; k < _res.length; k++) {
                             if (_res.length == 3) { // на всякий...
                                 model_vertices[_v][k] = _res[k];
+                                model_vertices_original[_v][k] = _res[k];
                             }
                         }
                         _v++;
@@ -184,6 +207,17 @@
                         }
                         _f++;
                     }
+                    else if (_str[0] == 'v' && _str[1] == 't' && _str[2] == ' ' && _str[3] == ' ') { // ищем вида vt 0.443 0.976 0.000
+                        let _exp = /-*\d+(\.\d+)*/gi;
+                        let _res = _str.match(_exp)
+                        model_vertices_textures[_vt] = [];
+                        for (let k = 0; k < _res.length; k++) {
+                            if (_res.length == 3) { // на всякий...
+                                model_vertices_textures[_vt][k] = _res[k];
+                            }
+                        }
+                        _vt++;
+                    }
                     _str = '';
                 }
             }
@@ -199,6 +233,31 @@
         Load();
     }
 
+    // Считывание текстуры из файла
+    function GetTexture() {
+        let img = new Image();
+        img.src = "RayTracing_on_JS/african_head_diffuse.png";
+        img.onload = function () {
+            texture_context.drawImage(img, 0, 0);
+            readTextureToArray();
+        };
+        function readTextureToArray() {
+            let textureData = texture_context.getImageData(0, 0, texture_canvas.width, texture_canvas.height);
+            let i = 0;
+            for (let x = 0; x < texture_canvas.width; x++) { // двумерный массив
+                texture_array[x] = [];
+                for (let y = 0; y < texture_canvas.height; y++) {
+                    let red = textureData.data[i];
+                    let green = textureData.data[i + 1];
+                    let blue = textureData.data[i + 2];
+                    texture_array[x][y] = ({ red, green, blue });
+                    i += 4;
+                }
+            }
+            textureData = []; // Массив картинки текстуры
+        }
+    }
+
     // Создание запроса на анимацию (на будущее)
     (function () {
         var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
@@ -206,19 +265,25 @@
         window.requestAnimationFrame = requestAnimationFrame;
     })();
 
+    // функция конвертации координат модели в текстурные (z - не нужен)
+    function get_texture_coord(_x, _y) {
+        let x = Math.round(_x * texture_array.length);
+        let y = Math.round(texture_canvas.width - (_y * texture_array[0].length));
+        return { x, y };
+    }
 
     // ============================================================================================================================
 
     // Функция Line_old. Рисует линию. Не используется
-    function Line_old(x0, y0, x1, y1) {
-        main_context.strokeStyle = "black";
-        main_context.lineWidth = 0.2;
-        main_context.beginPath();
-        main_context.moveTo(x0, main_canvas.height - y0);
-        main_context.lineTo(x1, main_canvas.height - y1);
-        main_context.closePath();
-        main_context.stroke();
-    }
+    // function Line_old(x0, y0, x1, y1) {
+    //     main_context.strokeStyle = "black";
+    //     main_context.lineWidth = 0.2;
+    //     main_context.beginPath();
+    //     main_context.moveTo(x0, main_canvas.height - y0);
+    //     main_context.lineTo(x1, main_canvas.height - y1);
+    //     main_context.closePath();
+    //     main_context.stroke(); 
+    // }
 
     // Функция Line. Рисует линию попиксельно
     function Line(x0, y0, x1, y1, width = 1, color = "black") {
@@ -269,63 +334,83 @@
         _context.fillStyle = _color;
         _context.fillRect(_x, _y, _radius, _radius);
     }
+    // function dot2(_x, _y, _radius = 1, _vt, _canvas = main_canvas, _context = main_context) {
+    //     _y = _canvas.height - _y;
+    //     _x = Math.round(_x);
+    //     _y = Math.round(_y);
+    //     _context.lineWidth = _radius;
+    //     let color_x = Math.round(_vt[0] * texture_canvas.width);
+    //     let color_y = Math.round(_vt[1] * texture_canvas.height);
+    //     let r = texture_array[color_x][color_y].red;
+    //     let g = texture_array[color_x][color_y].green;
+    //     let b = texture_array[color_x][color_y].blue;
+    //     let _color = "rgba(" + r + "," + g + "," + b + ", 1)";
+    //     _context.fillStyle = _color;
+    //     _context.fillRect(_x, _y, _radius, _radius);
+    // }
 
     // Функция Triangle_old. Заливает полигон цветом. Не используется
-    function Triangle_old(x0, y0, z0, x1, y1, z1, x2, y2, z2, light_vector, color) {
-        let _light_vector = light_vector;
-        let Ax = x0; // Получили два вектора: AB и CD с общим началом (хотя для векторного произведения это не важно)
-        let Ay = y0;
-        let Az = z0;
-        let Bx = x1;
-        let By = y1;
-        let Bz = z1;
-        let Cx = x0;
-        let Cy = y0;
-        let Cz = z0;
-        let Dx = x2;
-        let Dy = y2;
-        let Dz = z2;
-        let _vm = VectorMuliple_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz); // Векторное произведение краёв полигона
-        let _va = VectorAngle_DOTS(0, 0, 0, _light_vector[0], _light_vector[1], _light_vector[2], 0, 0, 0, _vm[0], _vm[1], _vm[2]); // Косинус угла между векторным произведением и вектором направления освещения
+    // function Triangle_old(x0, y0, z0, x1, y1, z1, x2, y2, z2, light_vector, color) {
+    //     let _light_vector = light_vector;
+    //     let Ax = x0; // Получили два вектора: AB и CD с общим началом (хотя для векторного произведения это не важно)
+    //     let Ay = y0;
+    //     let Az = z0;
+    //     let Bx = x1;
+    //     let By = y1;
+    //     let Bz = z1;
+    //     let Cx = x0;
+    //     let Cy = y0;
+    //     let Cz = z0;
+    //     let Dx = x2;
+    //     let Dy = y2;
+    //     let Dz = z2;
+    //     let _vm = VectorMuliple_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz); // Векторное произведение краёв полигона
+    //     let _va = VectorAngle_DOTS(0, 0, 0, _light_vector[0], _light_vector[1], _light_vector[2], 0, 0, 0, _vm[0], _vm[1], _vm[2]); // Косинус угла между векторным произведением и вектором направления освещения
 
-        if (_va >= 0) {
-            let r = Math.floor(_va * 255);
-            let g = Math.floor(_va * 255);
-            let b = Math.floor(_va * 255);
-            let _color = "rgba(" + r + "," + g + "," + b + ", 1)";
-            if (color != null) {
-                _color = color;
-            }
-            main_context.lineWidth = 1;
-            main_context.strokeStyle = _color;
-            main_context.fillStyle = _color;
-            main_context.beginPath();
-            main_context.moveTo(x0, main_canvas.height - y0);
-            main_context.lineTo(x1, main_canvas.height - y1);
-            main_context.lineTo(x2, main_canvas.height - y2);
-            main_context.stroke();
-            main_context.closePath();
-            main_context.fill();
-        }
-        else {
-            // Не рисуем ничего, т. к. свет падает позади полигона. 
-            // Но такой метод отсечения работает только для выпуклых поверхностей
-        }
-    }
+    //     if (_va >= 0) {
+    //         let r = Math.floor(_va * 255);
+    //         let g = Math.floor(_va * 255);
+    //         let b = Math.floor(_va * 255);
+    //         let _color = "rgba(" + r + "," + g + "," + b + ", 1)";
+    //         if (color != null) {
+    //             _color = color;
+    //         }
+    //         main_context.lineWidth = 1;
+    //         main_context.strokeStyle = _color;
+    //         main_context.fillStyle = _color;
+    //         main_context.beginPath();
+    //         main_context.moveTo(x0, main_canvas.height - y0);
+    //         main_context.lineTo(x1, main_canvas.height - y1);
+    //         main_context.lineTo(x2, main_canvas.height - y2);
+    //         main_context.stroke();
+    //         main_context.closePath();
+    //         main_context.fill();
+    //     }
+    //     else {
+    //         // Не рисуем ничего, т. к. свет падает позади полигона. 
+    //         // Но такой метод отсечения работает только для выпуклых поверхностей
+    //     }
+    // }
 
     // Функция Triangle. Заливает полигон цветом попиксельно
-    function Triangle(x0, y0, z0, x1, y1, z1, x2, y2, z2, color, zbuffer = []) { 
-        if (y0 > y1) { // swap(t0, t1);
-            x0 = [x1, x1 = x0][0];
+    function Triangle(x0, y0, z0, x1, y1, z1, x2, y2, z2, uv0_x, uv0_y, uv1_x, uv1_y, uv2_x, uv2_y, zbuffer = [], _color = null) { // uv - текстурные координаты { x, y } 
+        if (y0 > y1) {
+            x0 = [x1, x1 = x0][0]; // swap(t0, t1);
             y0 = [y1, y1 = y0][0];
+            uv0_x = [uv1_x, uv1_x = uv0_x][0]; // swap(uv0, uv1)
+            uv0_y = [uv1_y, uv1_y = uv0_y][0];
         }
-        if (y0 > y2) { // swap(t0, t2);
-            x0 = [x2, x2 = x0][0];
+        if (y0 > y2) {
+            x0 = [x2, x2 = x0][0]; // swap(t0, t2);
             y0 = [y2, y2 = y0][0];
+            uv0_x = [uv2_x, uv2_x = uv0_x][0]; // swap(uv0, uv2)
+            uv0_y = [uv2_y, uv2_y = uv0_y][0];
         }
-        if (y1 > y2) { // swap(t1, t2);
-            x1 = [x2, x2 = x1][0];
+        if (y1 > y2) {
+            x1 = [x2, x2 = x1][0]; // swap(t1, t2);
             y1 = [y2, y2 = y1][0];
+            uv1_x = [uv2_x, uv2_x = uv1_x][0]; // swap(uv1, uv2)
+            uv1_y = [uv2_y, uv2_y = uv1_y][0];
         }
         let t0 = { // точка 0
             x: x0,
@@ -342,14 +427,27 @@
             y: y2,
             z: z2,
         }
+        let uv0 = {
+            x: uv0_x,
+            y: uv0_y
+        }
+        let uv1 = {
+            x: uv1_x,
+            y: uv1_y
+        }
+        let uv2 = {
+            x: uv2_x,
+            y: uv2_y
+        }
         if (t0.y == t1.y && t0.y == t2.y) return; // Вырожденные не нужны
+
         let total_height = t2.y - t0.y;
 
-        for (let i = 0; i < total_height; i+=0.5) {
+        for (let i = 0; i < total_height; i += 0.5) {
             let second_half = i > t1.y - t0.y || t1.y == t0.y;
             let segment_height = second_half ? t2.y - t1.y : t1.y - t0.y;
-            let alpha = i/total_height;
-            let beta = (i - (second_half ? t1.y - t0.y : 0)) / segment_height; 
+            let alpha = i / total_height;
+            let beta = (i - (second_half ? t1.y - t0.y : 0)) / segment_height;
             let A = {
                 x: t0.x + (t2.x - t0.x) * alpha,
                 y: t0.y + (t2.y - t0.y) * alpha,
@@ -360,11 +458,24 @@
                 y: second_half ? t1.y + (t2.y - t1.y) * beta : t0.y + (t1.y - t0.y) * beta,
                 z: second_half ? t1.z + (t2.z - t1.z) * beta : t0.z + (t1.z - t0.z) * beta
             }
-            if (A.x > B.x) { // swap(A, B);
-                A.x = [B.x, B.x = A.x][0];
+
+            let uvA = {
+                x: uv0.x + (uv2.x - uv0.x) * alpha,
+                y: uv0.y + (uv2.y - uv0.y) * alpha
+            }
+            let uvB = {
+                x: second_half ? uv1.x + (uv2.x - uv1.x) * beta : uv0.x + (uv1.x - uv0.x) * beta,
+                y: second_half ? uv1.y + (uv2.y - uv1.y) * beta : uv0.y + (uv1.y - uv0.y) * beta
+            }
+
+            if (A.x > B.x) {
+                A.x = [B.x, B.x = A.x][0]; // swap(A, B);
                 A.y = [B.y, B.y = A.y][0];
                 A.z = [B.z, B.z = A.z][0];
+                uvA.x = [uvB.x, uvB.x = uvA.x][0]; // swap(uvA, uvB)
+                uvA.y = [uvB.y, uvB.y = uvA.y][0];
             }
+
             for (let j = A.x; j <= B.x; j++) {
                 let phi = B.x == A.x ? 1. : (j - A.x) / (B.x - A.x);
                 let P = {
@@ -372,66 +483,25 @@
                     y: Math.round(A.y + (B.y - A.y) * phi),
                     z: Math.round(A.z + (B.z - A.z) * phi)
                 }
+                let uvP = {
+                    x: Math.round(uvA.x + (uvB.x - uvA.x) * phi),
+                    y: Math.round(uvA.y + (uvB.y - uvA.y) * phi)
+                }
+                // console.log(uvP);
+                let r = texture_array[uvP.y][uvP.x].red;
+                let g = texture_array[uvP.y][uvP.x].green;
+                let b = texture_array[uvP.y][uvP.x].blue;
+                let color = "rgba(" + r + "," + g + "," + b + ", 1)";
+                if (_color != null) { color = _color }
                 let idx = P.x + P.y * main_canvas.width;
                 if (zbuffer[idx] < P.z) {
                     zbuffer[idx] = P.z;
                     dot(P.x, P.y, 1, color);
-                    //dot(P.x, P.y+1, 1, color);
-                }      
-            }  
+                }
+            }
             //dot(A.x, i, 1, color);
             //dot(B.x, i, 1, color);          
         }
-
-
-        // for (let y = t0.y; y <= t1.y; y++) {
-        //     let segment_height = t1.y - t0.y + 1;
-        //     let alpha = (y - t0.y) / total_height;
-        //     let beta = (y - t0.y) / segment_height;
-        //     let A = {
-        //         x: t0.x + (t2.x - t0.x) * alpha,
-        //         y: t0.y + (t2.y - t0.y) * alpha
-        //     }
-        //     let B = {
-        //         x: t0.x + (t1.x - t0.x) * beta,
-        //         y: t0.y + (t1.y - t0.y) * beta
-        //     }
-        //     if (A.x > B.x) { // swap(A, B);
-        //         A.x = [B.x, B.x = A.x][0];
-        //         A.y = [B.y, B.y = A.y][0];
-        //     }
-        //     for (let j = A.x; j <= B.x; j++) {
-        //         dot(j, y, 1, color);
-        //     }
-        //     dot(A.x, y, 1, color);
-        //     dot(B.x, y, 1, color);
-        // }
-        // for (let y = t1.y; y <= t2.y; y++) {
-        //     let segment_height = t2.y - t1.y + 1;
-        //     let alpha = (y - t0.y) / total_height;
-        //     let beta = (y - t1.y) / segment_height;
-        //     let A = {
-        //         x: t0.x + (t2.x - t0.x) * alpha,
-        //         y: t0.y + (t2.y - t0.y) * alpha
-        //     }
-        //     let B = {
-        //         x: t1.x + (t2.x - t1.x) * beta,
-        //         y: t1.y + (t2.y - t1.y) * beta
-        //     }
-        //     if (A.x > B.x) { // swap(A, B);
-        //         A.x = [B.x, B.x = A.x][0];
-        //         A.y = [B.y, B.y = A.y][0];
-        //     }
-        //     for (let j = A.x; j <= B.x; j++) {
-        //         dot(j, y, 1, color);
-        //     }
-        //     dot(A.x, y, 1, color);
-        //     dot(B.x, y, 1, color);
-        // }
-        // В консоли:
-        // Triangle2(10, 70, 50, 160, 70, 80, "red");
-        // Triangle2(180, 50, 150, 1, 70, 180, "red");
-        // Triangle2(180, 150, 120, 160, 130, 180, "red");
     }
 
     // Нахождение угла между векторами AB и CD (косинус угла)
@@ -480,6 +550,7 @@
     // Клики по кнопкам:    
     document.getElementById("loadButton").onclick = function (e) {
         GetModel();
+        GetTexture();
     }
     document.getElementById("resetButton").onclick = function (e) {
         //Render(0);
