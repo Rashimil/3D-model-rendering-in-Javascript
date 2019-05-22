@@ -15,6 +15,9 @@
             color: #333;
         }
     </style>
+    <script type="text/javascript" src='matrix.js'></script>
+    <script type="text/javascript" src='vector.js'></script>
+    <script type="text/javascript" src='model.js'></script>
 </head>
 
 <body>
@@ -68,8 +71,9 @@
 
     // ============================================================================================================================
 
-    // Функция рисования модели (главный цикл)
+    // Функция рисования (главный цикл)
     function Render(render_type) {
+        let date_begin = Date.now();
         let zbuffer = [];
         for (let i = 0; i < main_canvas.width * main_canvas.height; i++) {
             zbuffer[i] = -Infinity;
@@ -103,6 +107,21 @@
                 Line(a[0], a[1], b[0], b[1], 1, "black");
                 Line(b[0], b[1], c[0], c[1], 1, "black");
                 Line(c[0], c[1], a[0], a[1], 1, "black");
+            }
+            if(render_type == 100) {             
+                 for (let j = 0; j < 3; j++) {
+                    let v0 = {
+                        x: model_vertices[face[j][0] - 1][0],
+                        y: model_vertices[face[j][0] - 1][1],
+                        z: model_vertices[face[j][0] - 1][2]
+                    }
+                    let v1 = {
+                         x: model_vertices[face[(j + 1) % 3][0] - 1][0],
+                         y: model_vertices[face[(j + 1) % 3][0] - 1][1],
+                         z: model_vertices[face[(j + 1) % 3][0] - 1][2]
+                    }
+                    Line(v0.x, v0.y, v1.x, v1.y, 1, "black"); 
+                 }
             }
 
             let Ax = a[0]; // Получили два вектора: AB и CD с общим началом (хотя для векторного произведения это не важно)
@@ -165,115 +184,13 @@
             // let n = []; // Vec3f
             // n[0] = Math.pow(world_coords[2] - world_coords[0]), (world_coords[1] - world_coords[0]);
         }
+
+        let date_end = Date.now();
+        console.log('Executed in ' + (date_end - date_begin)/1000 + ' seconds');
     }
 
     // ============================================================================================================================
-
-    // Считывание модели из файла
-    function GetModel() {
-        function Load() {
-            httpRequest = new XMLHttpRequest();
-            httpRequest.open("GET", "/RayTracing_on_JS/Model.txt", true);
-            httpRequest.onreadystatechange = OnRequestStateChange;
-            httpRequest.send(null);
-        }
-        function OnRequestStateChange() {
-            if (httpRequest.readyState != 4) {
-                document.getElementById("modelBox").innerHTML = '!!! Model loading error !!!';
-                return;
-            }
-            if (httpRequest.status != 200)
-                return;
-            let _model = httpRequest.responseText;
-            let _str = '';
-            let _v = 0;
-            let _f = 0;
-            let _vt = 0;
-            for (let i = 0; i <= _model.length; i++) {
-                if (_model[i] != '\n') {
-                    _str += _model[i];
-                }
-                else {
-                    if (_str[0] == 'v' && _str[1] == ' ') { // ищем вида 'v 0.608654 -0.568839 -0.416318'
-                        let _exp = /-*\d+(\.\d+)*/gi;
-                        let _res = _str.match(_exp);
-                        model_vertices[_v] = [];
-                        model_vertices_original[_v] = [];
-                        for (let k = 0; k < _res.length; k++) {
-                            if (_res.length == 3) { // на всякий...
-                                model_vertices[_v][k] = _res[k];
-                                model_vertices_original[_v][k] = _res[k];
-                            }
-                        }
-                        _v++;
-                    }
-                    else if (_str[0] == 'f' && _str[1] == ' ') { // ищем вида 'f 1193/1240/1193 1180/1227/1180 1179/1226/1179'
-                        let _exp = /(-*\d+\/*)+/g;
-                        let _res = _str.match(_exp);
-                        model_faces[_f] = [];
-                        for (let k = 0; k < _res.length; k++) {
-                            model_faces[_f][k] = [];
-                            let _exp = /-*\d+/g; // ищем вида '1123/1170/1123'
-                            let _str = _res[k];
-                            let __res = _str.match(_exp);
-                            //console.log(__res);
-                            for (let l = 0; l < __res.length; l++) {
-                                model_faces[_f][k][l] = __res[l];
-                            }
-                        }
-                        _f++;
-                    }
-                    else if (_str[0] == 'v' && _str[1] == 't' && _str[2] == ' ' && _str[3] == ' ') { // ищем вида vt 0.443 0.976 0.000
-                        let _exp = /-*\d+(\.\d+)*/gi;
-                        let _res = _str.match(_exp)
-                        model_vertices_textures[_vt] = [];
-                        for (let k = 0; k < _res.length; k++) {
-                            if (_res.length == 3) { // на всякий...
-                                model_vertices_textures[_vt][k] = _res[k];
-                            }
-                        }
-                        _vt++;
-                    }
-                    _str = '';
-                }
-            }
-            document.getElementById("modelBox").innerHTML = _model;
-            (function model_scaling() { // масштабирование под экран
-                for (let i = 0; i < model_vertices.length; i++) {
-                    model_vertices[i][0] = (model_vertices[i][0] * model_size_cf) + x_pos_cf;
-                    model_vertices[i][1] = (model_vertices[i][1] * model_size_cf) + y_pos_cf;
-                    model_vertices[i][2] = (model_vertices[i][2] * model_size_cf);
-                }
-            }());
-        }
-        Load();
-    }
-
-    // Считывание текстуры из файла
-    function GetTexture() {
-        let img = new Image();
-        img.src = "RayTracing_on_JS/african_head_diffuse.png";
-        img.onload = function () {
-            texture_context.drawImage(img, 0, 0);
-            readTextureToArray();
-        };
-        function readTextureToArray() {
-            let textureData = texture_context.getImageData(0, 0, texture_canvas.width, texture_canvas.height);
-            let i = 0;
-            for (let x = 0; x < texture_canvas.width; x++) { // двумерный массив
-                texture_array[x] = [];
-                for (let y = 0; y < texture_canvas.height; y++) {
-                    let red = textureData.data[i];
-                    let green = textureData.data[i + 1];
-                    let blue = textureData.data[i + 2];
-                    texture_array[x][y] = ({ red, green, blue });
-                    i += 4;
-                }
-            }
-            textureData = []; // Массив картинки текстуры
-        }
-    }
-
+   
     // Создание запроса на анимацию (на будущее)
     (function () {
         var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
@@ -281,25 +198,7 @@
         window.requestAnimationFrame = requestAnimationFrame;
     })();
 
-    // функция конвертации координат модели в текстурные (z - не нужен)
-    function get_texture_coord(_x, _y) {
-        let x = Math.round(_x * texture_array.length);
-        let y = Math.round(texture_canvas.width - (_y * texture_array[0].length));
-        return { x, y };
-    }
-
     // ============================================================================================================================
-
-    // Функция Line_old. Рисует линию. Не используется
-    // function Line_old(x0, y0, x1, y1) {
-    //     main_context.strokeStyle = "black";
-    //     main_context.lineWidth = 0.2;
-    //     main_context.beginPath();
-    //     main_context.moveTo(x0, main_canvas.height - y0);
-    //     main_context.lineTo(x1, main_canvas.height - y1);
-    //     main_context.closePath();
-    //     main_context.stroke(); 
-    // }
 
     // Функция Line. Рисует линию попиксельно
     function Line(x0, y0, x1, y1, width = 1, color = "black") {
@@ -350,63 +249,6 @@
         _context.fillStyle = _color;
         _context.fillRect(_x, _y, _radius, _radius);
     }
-    // function dot2(_x, _y, _radius = 1, _vt, _canvas = main_canvas, _context = main_context) {
-    //     _y = _canvas.height - _y;
-    //     _x = Math.round(_x);
-    //     _y = Math.round(_y);
-    //     _context.lineWidth = _radius;
-    //     let color_x = Math.round(_vt[0] * texture_canvas.width);
-    //     let color_y = Math.round(_vt[1] * texture_canvas.height);
-    //     let r = texture_array[color_x][color_y].red;
-    //     let g = texture_array[color_x][color_y].green;
-    //     let b = texture_array[color_x][color_y].blue;
-    //     let _color = "rgba(" + r + "," + g + "," + b + ", 1)";
-    //     _context.fillStyle = _color;
-    //     _context.fillRect(_x, _y, _radius, _radius);
-    // }
-
-    // Функция Triangle_old. Заливает полигон цветом. Не используется
-    // function Triangle_old(x0, y0, z0, x1, y1, z1, x2, y2, z2, light_vector, color) {
-    //     let _light_vector = light_vector;
-    //     let Ax = x0; // Получили два вектора: AB и CD с общим началом (хотя для векторного произведения это не важно)
-    //     let Ay = y0;
-    //     let Az = z0;
-    //     let Bx = x1;
-    //     let By = y1;
-    //     let Bz = z1;
-    //     let Cx = x0;
-    //     let Cy = y0;
-    //     let Cz = z0;
-    //     let Dx = x2;
-    //     let Dy = y2;
-    //     let Dz = z2;
-    //     let _vm = VectorMuliple_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz); // Векторное произведение краёв полигона
-    //     let _va = VectorAngle_DOTS(0, 0, 0, _light_vector[0], _light_vector[1], _light_vector[2], 0, 0, 0, _vm[0], _vm[1], _vm[2]); // Косинус угла между векторным произведением и вектором направления освещения
-
-    //     if (_va >= 0) {
-    //         let r = Math.floor(_va * 255);
-    //         let g = Math.floor(_va * 255);
-    //         let b = Math.floor(_va * 255);
-    //         let _color = "rgba(" + r + "," + g + "," + b + ", 1)";
-    //         if (color != null) {
-    //             _color = color;
-    //         }
-    //         main_context.lineWidth = 1;
-    //         main_context.strokeStyle = _color;
-    //         main_context.fillStyle = _color;
-    //         main_context.beginPath();
-    //         main_context.moveTo(x0, main_canvas.height - y0);
-    //         main_context.lineTo(x1, main_canvas.height - y1);
-    //         main_context.lineTo(x2, main_canvas.height - y2);
-    //         main_context.stroke();
-    //         main_context.closePath();
-    //         main_context.fill();
-    //     }
-    //     else {
-    //         // Не рисуем ничего, т. к. свет падает позади полигона. 
-    //         // Но такой метод отсечения работает только для выпуклых поверхностей
-    //     }
-    // }
 
     // Функция Triangle. Заливает полигон цветом попиксельно
     function Triangle(x0, y0, z0, x1, y1, z1, x2, y2, z2, uv0_x, uv0_y, uv1_x, uv1_y, uv2_x, uv2_y, zbuffer, intensity, render_type = 2) { // uv - текстурные координаты { x, y } 
@@ -528,46 +370,6 @@
         }
     }
 
-    // Нахождение угла между векторами AB и CD (косинус угла)
-    function VectorAngle_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz) { // Координаты задаются точками начала и конца, векторы вида AB и CD
-        let AB = [Bx - Ax, By - Ay, Bz - Az]; // вектор AB по координатам точек
-        let CD = [Dx - Cx, Dy - Cy, Dz - Cz]; // вектор CD по координатам точек
-        let ABx = AB[0];
-        let ABy = AB[1];
-        let ABz = AB[2];
-        let CDx = CD[0];
-        let CDy = CD[1];
-        let CDz = CD[2];
-        let ABCD = ABx * CDx + ABy * CDy + ABz * CDz; //скалярное произведение векторов
-        let length_AB = Math.sqrt(Math.pow(ABx, 2) + Math.pow(ABy, 2) + Math.pow(ABz, 2));// длина вектора AB
-        let length_CD = Math.sqrt(Math.pow(CDx, 2) + Math.pow(CDy, 2) + Math.pow(CDz, 2));// длина вектора CD
-        let result = (ABCD / (length_AB * length_CD));
-        return result;
-    }
-
-    // Функции умножения трехмерных векторов (векторное произведение). Выдает координаты скаляра. т. е. перпендикуляра к поверхности, на которой лежат исходные вектора     
-    function VectorMuliple_DOTS(Ax, Ay, Az, Bx, By, Bz, Cx, Cy, Cz, Dx, Dy, Dz) { // Координаты задаются точками начала и конца, векторы вида AB и CD
-        let AB = [Bx - Ax, By - Ay, Bz - Az]; // вектор AB по координатам точек
-        let CD = [Dx - Cx, Dy - Cy, Dz - Cz]; // вектор CD по координатам точек
-        let ABx = AB[0];
-        let ABy = AB[1];
-        let ABz = AB[2];
-        let CDx = CD[0];
-        let CDy = CD[1];
-        let CDz = CD[2];
-        let i = (ABy * CDz - ABz * CDy);
-        let j = -1 * (ABx * CDz - ABz * CDx); // отрицательное, для нужной тройки векторов
-        let k = (ABx * CDy - ABy * CDx);
-        let result = [i, j, k];
-        return result;
-    }
-    function VectorMuliple(x0, y0, z0, x1, y1, z1) { // То же самое, но начало векторов - в [0. 0. 0] НЕ ИСПОЛЬЗУЕТСЯ
-        let i = (y0 * z1 - z0 * y1);
-        let j = (x0 * z1 - z0 * x1);
-        let k = (x0 * y1 - y0 * x1);
-        let result = [i, j, k];
-        return result;
-    }
 
     // ============================================================================================================================
 
@@ -590,7 +392,7 @@
         Render(3);
     }
     document.getElementById("testButton").onclick = function (e) {
-
+        Render(100);
     }
     // ============================================================================================================================
 
